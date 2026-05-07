@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -180,6 +180,18 @@ ipcMain.on('whip-crack', () => {
 });
 ipcMain.on('hide-overlay', () => { if (overlay) overlay.hide(); });
 
+ipcMain.handle('list-sounds', () => {
+  const dir = path.join(__dirname, 'sounds');
+  try {
+    return fs.readdirSync(dir)
+      .filter(f => /\.(mp3|wav|m4a|ogg)$/i.test(f))
+      .map(f => `sounds/${f}`);
+  } catch (err) {
+    console.warn('list-sounds failed:', err?.message || err);
+    return [];
+  }
+});
+
 // ── Macro: immediate Ctrl+C, type "Go FASER", Enter ───────────────────────
 function sendMacro() {
   // Pick a random phrase from a list of similar phrases and type it out
@@ -187,10 +199,14 @@ function sendMacro() {
     'FASTER',
     'FASTER',
     'FASTER',
+    'YOU SUCK, GO FASTER',
     'GO FASTER',
     'Faster CLANKER',
     'Work FASTER',
-    'Speed it up clanker',
+    'Speed it up!',
+    'FASTER',
+    'FASTER',
+    'FASTER',
   ];
   const chosen = phrases[Math.floor(Math.random() * phrases.length)];
 
@@ -277,7 +293,14 @@ function sendMacroLinux(text) {
 
 // ── App lifecycle ───────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
-  tray = new Tray(await getTrayIcon());
+  const icon = await getTrayIcon();
+  console.log('[openwhip] tray icon size:', icon.getSize(), 'isEmpty:', icon.isEmpty());
+  const resized = icon.isEmpty() ? icon : icon.resize({ width: 22, height: 22 });
+  if (process.platform === 'darwin') resized.setTemplateImage(true);
+  tray = new Tray(resized);
+  tray.setTitle('>>>OPENWHIP<<<');
+  console.log('[openwhip] tray created. bounds:', tray.getBounds());
+  setTimeout(() => console.log('[openwhip] tray bounds after 2s:', tray.getBounds()), 2000);
   tray.setToolTip('OpenWhip - click for whip');
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -285,6 +308,12 @@ app.whenReady().then(async () => {
     ])
   );
   tray.on('click', toggleOverlay);
-});
+
+  const shortcut = 'CommandOrControl+Shift+W';
+  const registered = globalShortcut.register(shortcut, toggleOverlay);
+  console.log(`[openwhip] global shortcut ${shortcut} registered:`, registered);
+}).catch(err => console.error('[openwhip] startup failed:', err));
+
+app.on('will-quit', () => globalShortcut.unregisterAll());
 
 app.on('window-all-closed', e => e.preventDefault()); // keep alive in tray

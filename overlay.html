@@ -49,9 +49,12 @@ const P = {
   wallFriction:    0.86,   // tangential damping on wall hit
 
   // Crack detection
-  crackSpeed:     340,     // tip velocity threshold to trigger crack
-  crackCooldownMs:200,   // min ms between cracks
-  firstCrackGraceMs: 350, // no crack (macro) until this long after spawn
+  crackSpeed:       300,   // tip velocity threshold to trigger crack
+  crackMouseSpeed:   14,   // user must be actively flicking the mouse this fast (px/frame, peak)
+  mouseFlickDecay:  0.90,  // how fast peak mouse speed decays each frame
+  crackRearmSpeed:   80,   // tip must drop below this before re-arm is allowed
+  crackCooldownMs:  400,   // hard time lockout between cracks
+  firstCrackGraceMs: 350,  // no crack (macro) until this long after spawn
 
   // Visuals
   lineWidthHandle: 7,      // rope thickness near handle
@@ -82,10 +85,14 @@ let whip = null;
 let dropping = false;
 let lastCrackTime = 0;
 let whipSpawnTime = 0;
+let crackArmed = true;
+let mouseFlickEnergy = 0;
 let handleAngle = P.baseTargetAngle;
 let handleAngVel = 0;
 
 const WHIP_CRACK_SOUNDS = ['sounds/A.mp3', 'sounds/B.mp3', 'sounds/C.mp3', 'sounds/D.mp3', 'sounds/E.mp3'];
+
+// const WHIP_CRACK_SOUNDS = ['sounds/1.mp3', 'sounds/2.mp3', 'sounds/3.mp3', 'sounds/4.mp3', 'sounds/5.mp3', 'sounds/6.mp3', 'sounds/7.mp3', 'sounds/8.mp3', 'sounds/9.mp3', 'sounds/10.mp3', 'sounds/11.mp3', 'sounds/12.mp3', 'sounds/13.mp3'];
 
 document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
 document.addEventListener('mousedown', () => {
@@ -357,12 +364,21 @@ function update() {
   const tip = whip[whip.length - 1];
   const tipVel = Math.hypot(tip.x - tip.px, tip.y - tip.py);
 
-  if (!dropping && tipVel > P.crackSpeed) {
-    const now = Date.now();
-    if (now - whipSpawnTime >= P.firstCrackGraceMs && now - lastCrackTime > P.crackCooldownMs) {
-      lastCrackTime = now;
-      playCrackSound();
-      window.bridge.whipCrack();
+  // Track peak mouse flick speed (decays each frame). Crack requires the user
+  // to be actively whipping — rope oscillations alone shouldn't fire sounds.
+  const mouseSpeed = Math.hypot(mouseX - prevMouseX, mouseY - prevMouseY);
+  mouseFlickEnergy = Math.max(mouseFlickEnergy * P.mouseFlickDecay, mouseSpeed);
+
+  if (!dropping) {
+    if (tipVel < P.crackRearmSpeed) crackArmed = true;
+    if (crackArmed && tipVel > P.crackSpeed && mouseFlickEnergy > P.crackMouseSpeed) {
+      const now = Date.now();
+      if (now - whipSpawnTime >= P.firstCrackGraceMs && now - lastCrackTime > P.crackCooldownMs) {
+        lastCrackTime = now;
+        crackArmed = false;
+        playCrackSound();
+        window.bridge.whipCrack();
+      }
     }
   }
 
@@ -443,6 +459,8 @@ window.bridge.onSpawnWhip(() => {
   prevMouseY = mouseY;
   handleAngle = P.baseTargetAngle;
   handleAngVel = 0;
+  crackArmed = true;
+  mouseFlickEnergy = 0;
 });
 
 window.bridge.onDropWhip(() => {

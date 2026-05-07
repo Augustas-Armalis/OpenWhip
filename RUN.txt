@@ -1,0 +1,5 @@
+Run / restart:
+
+
+pkill -f "OpenWhip/node_modules/electron"
+cd /Users/augustas/Documents/GitHub/OpenWhip && unset ELECTRON_RUN_AS_NODE && npm start
